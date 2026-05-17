@@ -1,0 +1,39 @@
+{
+  "food": {
+    "label": "Food",
+    "pages": [
+      "/menu-images/food/food-01.jpg",
+      "/menu-images/food/food-02.jpg",
+      "/menu-images/food/food-03.jpg",
+      "/menu-images/food/food-04.jpg",
+      "/menu-images/food/food-05.jpg",
+      "/menu-images/food/food-06.jpg",
+      "/menu-images/food/food-07.jpg",
+      "/menu-images/food/food-08.jpg",
+      "/menu-images/food/food-09.jpg",
+      "/menu-images/food/food-10.jpg",
+      "/menu-images/food/food-11.jpg",
+      "/menu-images/food/food-12.jpg",
+      "/menu-images/food/food-13.jpg",
+      "/menu-images/food/food-14.jpg",
+      "/menu-images/food/food-15.jpg",
+      "/menu-images/food/food-16.jpg",
+      "/menu-images/food/food-17.jpg"
+    ]
+  },
+  "drinks": {
+    "label": "Drinks",
+    "pages": [
+      "/menu-images/drinks/drink-01.jpg",
+      "/menu-images/drinks/drink-02.jpg",
+      "/menu-images/drinks/drink-03.jpg",
+      "/menu-images/drinks/drink-04.jpg",
+      "/menu-images/drinks/drink-05.jpg",
+      "/menu-images/drinks/drink-06.jpg",
+      "/menu-images/drinks/drink-07.jpg",
+      "/menu-images/drinks/drink-08.jpg",
+      "/menu-images/drinks/drink-09.jpg",
+      "/menu-images/drinks/drink-10.jpg"
+    ]
+  }
+}

@@ -9,3 +9,10 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 *.log
+
+# Firebase Admin SDK private key — NEVER commit this
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Personal Claude Code overrides (hooks, permissions etc.)
+.claude/settings.local.json

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import MenuCard from '../components/MenuCard.jsx'
+import MenuPagesViewer from '../components/MenuPagesViewer.jsx'
 import { useCart } from '../context/CartContext.jsx'
 
 const CATEGORIES = [
@@ -17,6 +18,7 @@ export default function Menu() {
   const [category, setCategory] = useState('food')
   const [section, setSection] = useState('all')
   const [search, setSearch] = useState('')
+  const [pagesManifest, setPagesManifest] = useState(null)
   const { totals } = useCart()
 
   useEffect(() => {
@@ -34,6 +36,15 @@ export default function Menu() {
       },
     )
     return unsub
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/menu-images/manifest.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => { if (!cancelled) setPagesManifest(m) })
+      .catch(() => { /* ignore — gracefully degrade */ })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -65,6 +76,13 @@ export default function Menu() {
       })
   }, [items, category, section, search])
 
+  // Pick a page image to use as a faint backdrop behind the orderable items
+  const backdropImage = useMemo(() => {
+    const pages = pagesManifest?.[category]?.pages || []
+    if (pages.length < 2) return null
+    return pages[1] || pages[0]
+  }, [pagesManifest, category])
+
   return (
     <div className="page-enter mx-auto max-w-6xl px-4 pb-24 pt-8 md:px-8 md:pt-12">
       <header className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
@@ -72,8 +90,7 @@ export default function Menu() {
           <p className="text-xs uppercase tracking-[0.32em] text-gold/80">Sky View</p>
           <h1 className="heading mt-2 text-3xl md:text-5xl">Our Menu</h1>
           <p className="mt-2 max-w-xl text-sm text-cream-dim">
-            Tap any dish to add it to your order. Variants like coffee size or pizza
-            size will show a selector.
+            Browse our printed menu pages or order directly from the cards below.
           </p>
         </div>
         {totals.count > 0 && (
@@ -136,36 +153,69 @@ export default function Menu() {
         </div>
       </div>
 
-      <section className="mt-6">
-        {error ? (
-          <div className="rounded-2xl border border-flame/40 bg-flame/10 p-6 text-sm text-flame">
-            {error}
-          </div>
-        ) : loading ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="card overflow-hidden">
-                <div className="aspect-[4/3] animate-pulse bg-charcoal-soft" />
-                <div className="space-y-3 p-4">
-                  <div className="h-4 w-3/4 animate-pulse rounded bg-charcoal-line" />
-                  <div className="h-3 w-1/3 animate-pulse rounded bg-charcoal-line" />
-                  <div className="h-9 w-full animate-pulse rounded-full bg-charcoal-line" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-charcoal-line p-12 text-center text-cream-dim">
-            <p className="heading text-xl text-cream">No items found</p>
-            <p className="mt-2 text-sm">Try a different category or search term.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((it) => (
-              <MenuCard key={it.id} item={it} />
-            ))}
-          </div>
+      <div className="mt-6">
+        <MenuPagesViewer category={category} manifest={pagesManifest} />
+      </div>
+
+      <section className="relative mt-2 overflow-hidden rounded-3xl border border-charcoal-line bg-charcoal-soft/40 p-4 md:p-6">
+        {backdropImage && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-0"
+            style={{
+              backgroundImage: `linear-gradient(to bottom, rgba(26,26,24,0.94), rgba(26,26,24,0.96)), url(${backdropImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(10px) saturate(0.85)',
+              transform: 'scale(1.08)',
+              opacity: 0.45,
+            }}
+          />
         )}
+
+        <div className="relative">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="heading text-lg md:text-xl">
+              Order from the {CATEGORIES.find((c) => c.key === category)?.label} menu
+            </h3>
+            <span className="text-xs text-cream-dim">
+              {filtered.length} item{filtered.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {error ? (
+            <div className="rounded-2xl border border-flame/40 bg-flame/10 p-6 text-sm text-flame">
+              {error}
+            </div>
+          ) : loading ? (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="card overflow-hidden">
+                  <div className="aspect-[4/3] animate-pulse bg-charcoal-soft" />
+                  <div className="space-y-3 p-4">
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-charcoal-line" />
+                    <div className="h-3 w-1/3 animate-pulse rounded bg-charcoal-line" />
+                    <div className="h-9 w-full animate-pulse rounded-full bg-charcoal-line" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-charcoal-line bg-charcoal-soft/70 p-12 text-center text-cream-dim">
+              <p className="heading text-xl text-cream">No orderable items yet</p>
+              <p className="mt-2 text-sm">
+                Browse the printed menu above. The admin can add orderable items from
+                the dashboard.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((it) => (
+                <MenuCard key={it.id} item={it} />
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       {totals.count > 0 && (
