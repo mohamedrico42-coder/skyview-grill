@@ -34,11 +34,12 @@ export default async function handler(req, res) {
       description,
     })
   } catch (err) {
-    console.error('[mpesa/stkpush] Daraja error:', err.message)
+    console.error('[mpesa/stkpush] Daraja error:', err.message, err.sent || '')
     return res.status(400).json({
       error: err.message || 'STK push failed',
       code: err.code || null,
       details: err.data || null,
+      sent: err.sent || null, // payload we sent to Daraja (no password)
     })
   }
 

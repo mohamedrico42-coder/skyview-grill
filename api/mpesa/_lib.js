@@ -18,10 +18,27 @@ const BASE = ENV === 'sandbox'
   ? 'https://sandbox.safaricom.co.ke'
   : 'https://api.safaricom.co.ke'
 
+// TransactionType depends on the shortcode's product configuration:
+//   • Safaricom's sandbox uses shortcode 174379, which is a PayBill →
+//     CustomerPayBillOnline. Sending CustomerBuyGoodsOnline returns
+//     "Invalid TransactionType".
+//   • Production till 3429185 is a Buy Goods → CustomerBuyGoodsOnline.
+// Override via MPESA_TRANSACTION_TYPE if your real account differs.
+const TX_TYPE =
+  process.env.MPESA_TRANSACTION_TYPE ||
+  (ENV === 'sandbox' ? 'CustomerPayBillOnline' : 'CustomerBuyGoodsOnline')
+
 export const config = {
   baseUrl: BASE,
   env: ENV,
+  transactionType: TX_TYPE,
+  // The customer-facing till — used as PartyB.
   shortcode: process.env.MPESA_SHORTCODE,
+  // Head Office / Online Pay Shortcode — used as BusinessShortCode and in the
+  // password seed. For most BuyGoods tills this is the same as the till, so
+  // we fall back to MPESA_SHORTCODE. Override only if Safaricom issued you a
+  // distinct Head Office number for your app.
+  headOffice: process.env.MPESA_HEAD_OFFICE || process.env.MPESA_SHORTCODE,
   passkey: process.env.MPESA_PASSKEY,
   consumerKey: process.env.MPESA_CONSUMER_KEY,
   consumerSecret: process.env.MPESA_CONSUMER_SECRET,
@@ -77,7 +94,7 @@ export function makeTimestamp(d = new Date()) {
 
 export function makePassword(timestamp = makeTimestamp()) {
   return Buffer
-    .from(`${config.shortcode}${config.passkey}${timestamp}`)
+    .from(`${config.headOffice}${config.passkey}${timestamp}`)
     .toString('base64')
 }
 
@@ -102,10 +119,10 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
   const amt = Math.max(1, Math.round(Number(amount) || 0))
 
   const payload = {
-    BusinessShortCode: config.shortcode,
+    BusinessShortCode: config.headOffice,
     Password: password,
     Timestamp: timestamp,
-    TransactionType: 'CustomerBuyGoodsOnline',
+    TransactionType: config.transactionType,
     Amount: amt,
     PartyA: partyA,
     PartyB: config.shortcode,
@@ -129,7 +146,14 @@ export async function initiateStkPush({ phone, amount, accountReference, descrip
       data?.errorMessage ||
       data?.ResponseDescription ||
       `STK push failed (HTTP ${res.status})`
-    throw Object.assign(new Error(msg), { code: 'STK_FAILED', data })
+    // Echo back what we sent (minus password) so the caller can see exactly
+    // what Daraja rejected.
+    const { Password, ...safePayload } = payload
+    throw Object.assign(new Error(msg), {
+      code: 'STK_FAILED',
+      data,
+      sent: { ...safePayload, _env: ENV, _url: `${BASE}/mpesa/stkpush/v1/processrequest` },
+    })
   }
   return data // { MerchantRequestID, CheckoutRequestID, ResponseCode, ResponseDescription, CustomerMessage }
 }

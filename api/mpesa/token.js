@@ -11,7 +11,10 @@ export default async function handler(req, res) {
     return res.status(200).json({
       access_token: token,
       env: config.env,
+      baseUrl: config.baseUrl,
       shortcode: config.shortcode,
+      headOffice: config.headOffice,
+      transactionType: config.transactionType,
     })
   } catch (err) {
     console.error('[mpesa/token] failed:', err.message)
