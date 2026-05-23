@@ -142,5 +142,6 @@ Add a `vercel.json` (optional) for SPA routing if needed:
 ## Contact
 
 - WhatsApp: `0119 619 263` (254119619263)
-- Hours: Mon–Sun, 6:00 AM – 10:30 PM
+- Hours: Open every day, 7:00 AM – 10:00 PM
+- Location: Simara Mall, Tom Mboya Street, Nairobi · First Floor & Rooftop
 - Instagram & TikTok: `@SkyViewGrill`

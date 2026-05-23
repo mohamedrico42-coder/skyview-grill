@@ -103,8 +103,8 @@ function Hero() {
         </div>
 
         <div className="mt-14 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-          <InfoPill label="Location" value={RESTAURANT.location} />
-          <InfoPill label="Hours" value="6 AM – 10:30 PM" />
+          <InfoPill label="Location" value={`${RESTAURANT.location} · ${RESTAURANT.floors}`} />
+          <InfoPill label="Hours" value={RESTAURANT.hoursShort} />
           <InfoPill label="Call" value={RESTAURANT.phoneDisplay} />
         </div>
       </div>
@@ -202,12 +202,15 @@ function InfoBlock() {
           <p className="mt-1 text-sm text-cream/85">
             Tom Mboya Street, Nairobi CBD
           </p>
+          <p className="mt-1 text-sm text-gold/90">
+            {RESTAURANT.floors}
+          </p>
         </div>
         <div>
           <p className="label">Opening Hours</p>
           <p className="heading text-xl">Every Day</p>
           <p className="mt-1 text-sm text-cream/85">
-            6:00 AM – 10:30 PM
+            7:00 AM – 10:00 PM
           </p>
         </div>
         <div>

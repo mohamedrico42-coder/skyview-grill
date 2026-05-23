@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { addDoc, collection, doc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { useCart } from '../context/CartContext.jsx'
 import {
@@ -35,6 +35,16 @@ export default function Order() {
   const [mpesaPhone, setMpesaPhone] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+
+  // M-Pesa STK push waiting state
+  const [mpesaState, setMpesaState] = useState(null) // null | { orderId, message, status }
+  const mpesaUnsubRef = useRef(null)
+  const mpesaTimeoutRef = useRef(null)
+
+  useEffect(() => () => {
+    if (mpesaUnsubRef.current) mpesaUnsubRef.current()
+    if (mpesaTimeoutRef.current) clearTimeout(mpesaTimeoutRef.current)
+  }, [])
 
   const validation = useMemo(() => {
     if (items.length === 0) return 'Your cart is empty.'
@@ -74,17 +84,99 @@ export default function Order() {
         total: totals.subtotal,
         paymentMethod,
         mpesaPhone: paymentMethod === 'mpesa' ? mpesaPhone.trim() : null,
+        paymentStatus: 'pending',
         status: 'received',
         createdAt: serverTimestamp(),
       }
       const ref = await addDoc(collection(db, 'orders'), payload)
-      clear()
-      navigate(`/confirmation?id=${ref.id}`, { replace: true })
+
+      if (paymentMethod === 'mpesa') {
+        await startMpesaFlow(ref.id)
+      } else {
+        clear()
+        navigate(`/confirmation?id=${ref.id}`, { replace: true })
+      }
     } catch (err) {
       console.error(err)
       setError('Could not submit order. Please try again or use WhatsApp.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const cancelMpesaWait = () => {
+    if (mpesaUnsubRef.current) { mpesaUnsubRef.current(); mpesaUnsubRef.current = null }
+    if (mpesaTimeoutRef.current) { clearTimeout(mpesaTimeoutRef.current); mpesaTimeoutRef.current = null }
+    setMpesaState(null)
+  }
+
+  const startMpesaFlow = async (orderId) => {
+    setMpesaState({ orderId, status: 'sending', message: 'Sending payment request to your phone…' })
+    try {
+      const resp = await fetch('/api/mpesa/stkpush', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: mpesaPhone.trim(),
+          amount: totals.subtotal,
+          orderId,
+          description: `Order ${orderId.slice(-6).toUpperCase()}`,
+        }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setMpesaState({
+          orderId,
+          status: 'failed',
+          message: data.error || 'Could not start M-Pesa payment.',
+        })
+        return
+      }
+
+      setMpesaState({
+        orderId,
+        status: 'waiting',
+        message: data.message || 'Check your phone and enter your M-Pesa PIN.',
+      })
+
+      // Listen for callback to mark this order paid/failed
+      const orderRef = doc(db, 'orders', orderId)
+      mpesaUnsubRef.current = onSnapshot(orderRef, (snap) => {
+        const d = snap.data()
+        if (!d) return
+        if (d.paymentStatus === 'paid') {
+          cancelMpesaWait()
+          clear()
+          navigate(`/confirmation?id=${orderId}`, { replace: true })
+        } else if (d.paymentStatus === 'failed') {
+          setMpesaState({
+            orderId,
+            status: 'failed',
+            message: d.mpesaResultDesc || 'Payment was cancelled or failed.',
+          })
+        }
+      })
+
+      // 90s timeout — Daraja STK prompt expires around then
+      mpesaTimeoutRef.current = setTimeout(() => {
+        setMpesaState((s) =>
+          s && s.status === 'waiting'
+            ? {
+                ...s,
+                status: 'timeout',
+                message:
+                  'No response yet. The prompt may have expired — try again, or use a different payment method.',
+              }
+            : s,
+        )
+      }, 90_000)
+    } catch (err) {
+      console.error(err)
+      setMpesaState({
+        orderId,
+        status: 'failed',
+        message: 'Could not reach M-Pesa. Please try again.',
+      })
     }
   }
 
@@ -291,16 +383,18 @@ export default function Order() {
             </div>
             {paymentMethod === 'mpesa' && (
               <div>
-                <label className="label">M-Pesa Phone</label>
+                <label className="label">M-Pesa Phone (Safaricom)</label>
                 <input
                   value={mpesaPhone}
                   onChange={(e) => setMpesaPhone(e.target.value)}
                   placeholder="07XX XXX XXX"
                   inputMode="tel"
+                  pattern="[0-9+ ]*"
                   className="input"
                 />
                 <p className="mt-2 text-xs text-cream-dim">
-                  We will send the STK push to this number.
+                  Enter the Safaricom number that will receive the M-Pesa PIN
+                  prompt — accepts 07XXXXXXXX or 2547XXXXXXXX.
                 </p>
               </div>
             )}
@@ -346,7 +440,13 @@ export default function Order() {
               disabled={submitting || !!validation}
               className="btn-primary w-full"
             >
-              {submitting ? 'Placing order…' : 'Place Order'}
+              {submitting
+                ? paymentMethod === 'mpesa'
+                  ? 'Starting M-Pesa…'
+                  : 'Placing order…'
+                : paymentMethod === 'mpesa'
+                ? `Pay ${formatKES(totals.subtotal)} with M-Pesa`
+                : 'Place Order'}
             </button>
 
             <a
@@ -363,6 +463,71 @@ export default function Order() {
             </p>
           </div>
         </aside>
+      </div>
+
+      {mpesaState && (
+        <MpesaWaitingModal
+          state={mpesaState}
+          onClose={cancelMpesaWait}
+          onRetry={() => mpesaState.orderId && startMpesaFlow(mpesaState.orderId)}
+        />
+      )}
+    </div>
+  )
+}
+
+function MpesaWaitingModal({ state, onClose, onRetry }) {
+  const { status, message } = state
+  const isWaiting = status === 'sending' || status === 'waiting'
+  const isFailed = status === 'failed' || status === 'timeout'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/95 px-4 backdrop-blur-md animate-fade-in">
+      <div className="card relative w-full max-w-md p-8 text-center">
+        {isWaiting && (
+          <>
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gold/15 ring-4 ring-gold/30">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-charcoal-line border-t-gold" />
+            </div>
+            <p className="mt-6 text-xs uppercase tracking-[0.32em] text-gold/80">
+              M-Pesa Payment
+            </p>
+            <h2 className="heading mt-2 text-2xl">
+              {status === 'sending' ? 'Sending request…' : 'Check your phone'}
+            </h2>
+            <p className="mt-3 text-sm text-cream/85">{message}</p>
+            <p className="mt-4 text-xs text-cream-dim">
+              You'll see a Safaricom STK prompt — enter your PIN to confirm payment.
+            </p>
+            <button onClick={onClose} className="btn-ghost mt-6 mx-auto">
+              Cancel
+            </button>
+          </>
+        )}
+
+        {isFailed && (
+          <>
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-flame/15 ring-4 ring-flame/30 text-flame text-3xl">
+              ✕
+            </div>
+            <p className="mt-6 text-xs uppercase tracking-[0.32em] text-flame">
+              Payment {status === 'timeout' ? 'timed out' : 'failed'}
+            </p>
+            <h2 className="heading mt-2 text-2xl">Try again?</h2>
+            <p className="mt-3 text-sm text-cream/85">{message}</p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button onClick={onRetry} className="btn-primary">
+                Retry M-Pesa
+              </button>
+              <button onClick={onClose} className="btn-ghost">
+                Close
+              </button>
+            </div>
+            <p className="mt-4 text-[11px] text-cream-dim">
+              Your order is saved as pending — staff can still see it.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )

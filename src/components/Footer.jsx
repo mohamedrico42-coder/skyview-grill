@@ -28,6 +28,7 @@ export default function Footer() {
         <div>
           <p className="label">Visit Us</p>
           <p className="text-sm text-cream/90">{RESTAURANT.location}</p>
+          <p className="text-sm text-gold/90">{RESTAURANT.floors}</p>
           <p className="mt-3 label">Hours</p>
           <p className="text-sm text-cream/90">{RESTAURANT.hours}</p>
         </div>

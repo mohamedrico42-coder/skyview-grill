@@ -1,4 +1,4 @@
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase/config.js'
 import {
   ORDER_STATUSES,
@@ -13,6 +13,13 @@ const STATUS_STYLES = {
   ready: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
   done: 'bg-cream/10 text-cream-dim border-cream-dim/30',
 }
+
+const PAYMENT_STYLES = {
+  paid: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
+  pending: 'bg-gold/15 text-gold border-gold/40',
+  failed: 'bg-flame/15 text-flame border-flame/40',
+}
+const PAYMENT_LABEL = { paid: 'Paid', pending: 'Pending', failed: 'Failed' }
 
 const formatTime = (ts) => {
   if (!ts?.toDate) return ''
@@ -30,8 +37,22 @@ export default function OrderCard({ order }) {
     }
   }
 
+  const markPaid = async () => {
+    try {
+      await updateDoc(doc(db, 'orders', order.id), {
+        paymentStatus: 'paid',
+        paidAt: serverTimestamp(),
+        paymentUpdatedAt: serverTimestamp(),
+      })
+    } catch (e) {
+      console.error('Failed to mark paid', e)
+      alert('Could not mark paid.')
+    }
+  }
+
   const next = nextStatus(order.status)
   const shortId = order.id.slice(-6).toUpperCase()
+  const paymentStatus = order.paymentStatus || 'pending'
 
   return (
     <div className="card p-5 space-y-4">
@@ -44,11 +65,19 @@ export default function OrderCard({ order }) {
             {order.tableNumber ? ` · Table ${order.tableNumber}` : ''}
           </p>
         </div>
-        <span
-          className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${STATUS_STYLES[order.status] || ''}`}
-        >
-          {statusLabel(order.status)}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${STATUS_STYLES[order.status] || ''}`}
+          >
+            {statusLabel(order.status)}
+          </span>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${PAYMENT_STYLES[paymentStatus] || ''}`}
+            title={order.mpesaResultDesc || ''}
+          >
+            {PAYMENT_LABEL[paymentStatus] || paymentStatus}
+          </span>
+        </div>
       </header>
 
       <div>
@@ -92,6 +121,19 @@ export default function OrderCard({ order }) {
           </p>
           {order.mpesaPhone && (
             <p className="text-xs text-cream-dim">{order.mpesaPhone}</p>
+          )}
+          {order.mpesaReceiptNumber && (
+            <p className="text-xs text-emerald-400">
+              ✓ {order.mpesaReceiptNumber}
+            </p>
+          )}
+          {paymentStatus !== 'paid' && (
+            <button
+              onClick={markPaid}
+              className="mt-1 rounded-full border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 hover:bg-emerald-500/10"
+            >
+              Mark Paid
+            </button>
           )}
         </div>
       </div>
